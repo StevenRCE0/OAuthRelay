@@ -4,14 +4,16 @@ import { ImageResponse } from 'next/og'
 import type { NextRequest } from 'next/server'
 import { inviteLabels } from '@/lib/invite'
 
-// The OpenGraph card for /context: the invite page's card, drawn in the same
-// PassKeyValue frame. Crawlers fetch the invite without its fragment, so the
-// card shows only the names /context passes along from its query
-// (lib/invite.ts); with none it is the generic invitation. The fonts are read
-// from public/ (the renderer takes woff, not woff2) and traced into the
-// function by next.config.ts.
+// The OpenGraph card for /context, drawn as an envelope: the inviter in the
+// sender's corner, a plain stamp, and the conversation written where the
+// address goes, inside an airmail border in the accent.
+// Crawlers fetch the invite without its fragment, so the envelope shows only
+// the names /context passes along from its query (lib/invite.ts); with none it
+// is addressed to "a conversation". The fonts are read from public/ (the
+// renderer takes woff, not woff2) and traced into the function by
+// next.config.ts.
 
-const font = (file: string) => readFile(join(process.cwd(), 'public/fonts', file))
+const asset = (file: string) => readFile(join(process.cwd(), 'public', file))
 
 // CJK faces, fetched from Google Fonts cut down to just the characters they
 // set. Chinese in the serif title is set in a Song face, as on the page: Songti
@@ -37,25 +39,35 @@ async function cjkFont(family: string, text: string) {
   }
 }
 
-const PAPER = '#f6f6f4'
-const PANEL = '#fbfbfa'
+// The page's own background, hatched; the lines sit 1.5x as far from it as
+// they first did against a darker desk.
+const DESK = '#f6f6f4'
+const HATCH = '#dedcd8'
+const ENVELOPE = '#fbfaf6'
 const INK = '#0a0a0a'
 const MUTED = '#5a5a5a'
-const LINE = '#dadad8'
-// The page's glow (the accent at 7%), resolved against PAPER: the renderer
-// blends a translucent stop far stronger than a browser does.
-const GLOW = '#edeaef'
+const FAINT = '#888888'
+const LINE = '#cfccc5'
+const ACCENT = '#7949b0'
+const STAMP = '#dedcd6'
+// How far the address line sits above the bottom of the title's line box, as
+// a share of the font size: a touch above Instrument Serif's baseline (about
+// 0.2 at a line height of 1.02), so it runs through the foot of the letters.
+const RULE = 0.27
 
 export async function GET(request: NextRequest) {
   const { name, from, as } = inviteLabels(new URL(request.url).searchParams)
   const length = Array.from(name ?? '').length
-  const title = name ?? 'A conversation on KeepTalking'
-  const [serif, sans, song, sansCJK] = await Promise.all([
-    font('instrument-serif-latin-400-normal.woff'),
-    font('raleway-latin-400-normal.woff'),
+  const titleSize = length > 40 ? 64 : length > 22 ? 80 : 104
+  const title = name ?? 'A conversation'
+  const [serif, sans, mono, song, sansCJK] = await Promise.all([
+    asset('fonts/instrument-serif-latin-400-normal.woff'),
+    asset('fonts/raleway-latin-400-normal.woff'),
+    asset('fonts/jetbrains-mono-latin-400-normal.woff'),
     cjkFont('Noto+Serif+SC', title),
     cjkFont('Noto+Sans+SC', [from, as].join(' ')),
   ])
+  const label = { fontFamily: 'JetBrains Mono', fontSize: 20, letterSpacing: 4, color: FAINT }
 
   return new ImageResponse(
     (
@@ -64,57 +76,84 @@ export async function GET(request: NextRequest) {
           width: '100%',
           height: '100%',
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
-          padding: '64px 0 0',
-          background: `linear-gradient(to bottom, ${GLOW}, ${PAPER} 300px)`,
-          color: INK,
+          justifyContent: 'center',
+          // The surface the envelope lies on, hatched in thin grey lines at 135°.
+          background: `repeating-linear-gradient(135deg, ${HATCH} 0px, ${HATCH} 2px, ${DESK} 2px, ${DESK} 16px)`,
           fontFamily: 'Raleway, Sans CJK',
+          color: INK,
         }}
       >
-        <div style={{ fontFamily: 'Instrument Serif', fontSize: 52, letterSpacing: -0.5 }}>KeepTalking</div>
+        {/* The airmail border: the envelope's edge, striped in the accent. */}
         <div
           style={{
-            marginTop: 40,
-            width: 960,
+            width: 1064,
+            height: 540,
             display: 'flex',
-            flexDirection: 'column',
-            border: `2px solid ${LINE}`,
-            background: PANEL,
+            padding: 14,
+            background: `repeating-linear-gradient(45deg, ${ACCENT} 0px, ${ACCENT} 20px, ${ENVELOPE} 20px, ${ENVELOPE} 40px)`,
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', padding: '48px 56px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 30, color: MUTED }}>
-              {from ? (
-                <span style={{ color: INK, marginRight: 9 }}>{from}</span>
-              ) : null}
-              {from ? 'invited you to join' : "You've been invited to join"}
-            </div>
-            <div
-              style={{
-                display: 'block',
-                marginTop: 10,
-                fontFamily: 'Instrument Serif, Songti',
-                fontSize: length > 40 ? 56 : length > 22 ? 68 : 84,
-                lineHeight: 1.1,
-                letterSpacing: -1.5,
-                lineClamp: 2,
-              }}
-            >
-              {title}
-            </div>
-            {as ? <div style={{ fontSize: 28, color: MUTED, marginTop: 14 }}>{`Joining as ${as}`}</div> : null}
-          </div>
           <div
             style={{
+              flex: 1,
+              position: 'relative',
               display: 'flex',
-              justifyContent: 'center',
-              padding: '26px 0',
-              borderTop: `2px solid ${LINE}`,
-              fontSize: 30,
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '44px 56px 52px',
+              background: ENVELOPE,
             }}
           >
-            Join
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={label}>FROM</div>
+              <div style={{ marginTop: 10, fontSize: 38 }}>{from ?? 'KeepTalking'}</div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 780 }}>
+              <div style={label}>AN INVITATION TO</div>
+              {/* The address line runs just above the name's last baseline, drawn
+                  first so the letters cross it on their way down. */}
+              <div style={{ position: 'relative', display: 'flex', marginTop: 14 }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: Math.round(titleSize * RULE),
+                    height: 2,
+                    background: LINE,
+                  }}
+                />
+                <div
+                  style={{
+                    display: 'block',
+                    fontFamily: 'Instrument Serif, Songti',
+                    fontSize: titleSize,
+                    lineHeight: 1.02,
+                    letterSpacing: -1.5,
+                    lineClamp: 2,
+                  }}
+                >
+                  {title}
+                </div>
+              </div>
+              <div style={{ marginTop: 14, fontSize: 32, color: MUTED }}>
+                {as ? `Joining as ${as}` : 'on KeepTalking'}
+              </div>
+            </div>
+
+            {/* The stamp: a plain grey rectangle. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 36,
+                right: 44,
+                width: 140,
+                height: 172,
+                background: STAMP,
+              }}
+            />
           </div>
         </div>
       </div>
@@ -125,6 +164,7 @@ export async function GET(request: NextRequest) {
       fonts: [
         { name: 'Instrument Serif', data: serif, weight: 400 },
         { name: 'Raleway', data: sans, weight: 400 },
+        { name: 'JetBrains Mono', data: mono, weight: 400 },
         ...(song ? [{ name: 'Songti', data: song, weight: 400 as const }] : []),
         ...(sansCJK ? [{ name: 'Sans CJK', data: sansCJK, weight: 400 as const }] : []),
       ],

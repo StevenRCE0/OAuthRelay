@@ -101,7 +101,6 @@ The **query** carries only the names a recipient should see: the context, who se
 | Variable | Required | Description |
 |---|---|---|
 | `APPLE_APP_IDS` | For universal links | Comma-separated `<TeamID>.<bundle id>` list allowed to claim `/context`. Unset serves no apple-app-site-association. |
-| `INVITE_IOS_URL` | No | Install link for iPhone and iPad shown on `/context` (e.g. TestFlight). |
-| `INVITE_MAC_URL` | No | Install link for Mac shown on `/context`. |
+| `DOWNLOADS_URL` | No | The build list `/context` shows under "New to KeepTalking?". Defaults to `https://keeptalking.dev/downloads.json`, the same list keeptalking.dev/beta renders; builds without a link show as work in progress. |
 
-The app's entitlements must list `applinks:<your relay host>`. KeepTalking takes this from the `INVITE_LINK_HOST` build setting.
+The app's entitlements must list `applinks:<your relay host>`. KeepTalking takes this from the `RELAY_HOST` build setting.

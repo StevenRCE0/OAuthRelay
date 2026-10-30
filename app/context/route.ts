@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { JOIN_SCRIPT } from '@/lib/joinScript'
 import { inviteLabels, inviteQuery, type InviteLabels } from '@/lib/invite'
+import { type Download, downloads } from '@/lib/downloads'
 import { HOME_URL, escape, htmlResponse } from '@/lib/page'
 
 // Landing page for KeepTalking context invites:
@@ -65,6 +66,7 @@ const STYLE = `
 
 /* New to KeepTalking: the install rows, as keeptalking.dev/beta numbers them. */
 .install { margin-top: clamp(7rem, 28vh, 12rem); width: 100%; max-width: 40rem; }
+.footer { max-width: 40rem; }
 .row-label {
   font-family: var(--mono); font-weight: 300; font-size: 0.8rem; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--faint);
@@ -89,6 +91,11 @@ const STYLE = `
   white-space: nowrap; transition: text-decoration-color 0.15s;
 }
 .link:hover { text-decoration-color: currentColor; }
+.status {
+  font-family: var(--mono); font-weight: 300; font-size: 0.8rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--faint); white-space: nowrap;
+}
+.wip h2 { color: var(--muted); }
 /* The arrow falls back to a system font, whose underline sits elsewhere; an
    inline-block keeps it out of the decoration so only the words are ruled. */
 .link span { display: inline-block; margin-left: 0.2em; }
@@ -97,19 +104,20 @@ const STYLE = `
 }
 `
 
-// Install links for people without the app, numbered like keeptalking.dev/beta,
-// in their own section a scroll below the invite.
-function install() {
-  const builds = [
-    { kind: 'Mobile', platform: 'iPhone &amp; iPad', href: process.env.INVITE_IOS_URL, action: 'Join Beta Testing' },
-    { kind: 'Desktop', platform: 'macOS', href: process.env.INVITE_MAC_URL, action: 'Download DMG' },
-  ].filter((build) => build.href)
+// Install links for people without the app, numbered as keeptalking.dev/beta
+// numbers them (lib/downloads.ts), in their own section a scroll below the
+// invite. A build still in progress shows its status where the link would be.
+function install(builds: Download[]) {
   if (builds.length === 0) return ''
   const rows = builds.map(
     (build, i) => `
-    <div class="row">
-      <div><p class="row-label">0${i + 1} / ${build.kind}</p><h2>${build.platform}</h2></div>
-      <a class="link" href="${escape(build.href!)}">${build.action}<span aria-hidden="true">↗</span></a>
+    <div class="row${build.href ? '' : ' wip'}">
+      <div><p class="row-label">${String(i + 1).padStart(2, '0')} / ${escape(build.kind)}</p><h2>${escape(build.platform)}</h2></div>
+      ${
+        build.href
+          ? `<a class="link" href="${escape(build.href)}">${escape(build.action!)}<span aria-hidden="true">↗</span></a>`
+          : `<span class="status">${escape(build.meta || 'Work in progress')}</span>`
+      }
     </div>`,
   )
   return `<section class="install" aria-labelledby="install-title">
@@ -129,7 +137,7 @@ const DOCK = `<div class="dock" id="dock" hidden>
   <a class="action action-primary" id="dock-join" href="#">Join</a>
 </div>`
 
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const { origin, searchParams } = new URL(request.url)
   const labels = inviteLabels(searchParams)
   const query = inviteQuery(labels)
@@ -174,7 +182,7 @@ export function GET(request: NextRequest) {
   </div>
 </div>`,
     after: `${DOCK}
-${install()}`,
+${install(await downloads())}`,
     script: JOIN_SCRIPT,
   })
 }
