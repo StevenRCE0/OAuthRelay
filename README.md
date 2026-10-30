@@ -77,24 +77,26 @@ On missing `code` with no `error`, returns `400 { "error": "missing_code" }`.
 
 ## Front door
 
-`/` is a short introduction that links to keeptalking.dev and to this repository. Every path without a route of its own gets a temporary (307) redirect there. The OAuth callback, `/context` and the apple-app-site-association file are never redirected. All pages are hand-written HTML served from route handlers (`lib/page.ts`), so they load no framework scripts.
+`/` is a short introduction that links to keeptalking.dev and to this repository. Every path without a route of its own gets a temporary (307) redirect there. The OAuth callback, `/context` and the apple-app-site-association file are never redirected. All pages are hand-written HTML served from route handlers (`lib/page.ts`), so they load no framework scripts. They share PassKeyValue's look: a centred wordmark, one square card with its actions along the foot, and light and dark themes.
 
 ## Context invites (`/context`)
 
-The relay also fronts KeepTalking context invites, so they can be tapped in any app, get a link preview, and tell new users where to get the app:
+The relay also fronts KeepTalking context invites, so they can be tapped in any app, get a link preview, and land new users on an invite page, laid out like a chat app's invitation, before they have the app:
 
 ```
-https://your-relay/context#ktctx:<token>
+https://your-relay/context?name=<context>&from=<inviter>&as=<role>#ktctx:<token>
 ```
 
-An invite token is a bearer credential (it carries the context's group secret), so it rides the URL **fragment**. Browsers never send the fragment to the server, and never put it in `Referer` either. This relay only ever sees `GET /context`, and nothing it logs can carry an invite. The `ktctx:` link inside the fragment is the real invite. The app accepts it bare, and anyone can strip the wrapper by hand.
+An invite token is a bearer credential (it carries the context's group secret), so it rides the URL **fragment**. Browsers never send the fragment to the server, and never put it in `Referer` either. The `ktctx:` link inside the fragment is the real invite. The app accepts it bare, and anyone can strip the wrapper by hand.
+
+The **query** carries only the names a recipient should see: the context, who sent the invite, and the role it fills. They are the inviter's own labels, the same ones inside the token, and every one is optional. The relay renders them into the page and the link preview, so it does see (and may log) them. The app adds them in `ContextInviteLink`. A link without them still works and gets the generic card.
 
 - **Installed apps** claim `/context` as a universal link through `/.well-known/apple-app-site-association` and open the invite directly, without loading the page.
-- **Everyone else** gets a static page with generic OpenGraph tags, install links, and an "Open in KeepTalking" button.
-  - The page's single inline script fills the button and shows the context name, the inviter, and their friendly names (`lib/friendlyName.ts`, a verbatim copy of the SDK's `UUIDFriendlyName` word lists). It decodes the fragment in the browser.
+- **Everyone else** gets a server-rendered invite card: "<inviter> invited you to join", the context name, and the role. Its title and OpenGraph tags come from the query. A scroll below, "New to KeepTalking?" lists the install links, and once you reach it the card docks at the top, cut down to its name and Join. Chinese in serif text is set in Songti (Noto Serif SC in the preview image).
+  - The page's single inline script decodes the fragment in the browser, then fills the "Join" button and redraws the card from the token's own names and their friendly names (`lib/friendlyName.ts`, a verbatim copy of the SDK's `UUIDFriendlyName` word lists). A link whose fragment is missing or broken says so.
   - The script makes no requests, stores nothing, writes everything with `textContent`, and never reads the secret.
-- **The page is a route handler, not a React page**, so the framework injects no scripts. Its `Content-Security-Policy` admits only that one script and that one stylesheet, by SHA-256 hash, computed at startup from what is served.
-- **The link-preview image** (`/og/invite`) is generic on purpose. Crawlers never see the fragment, so the sending device supplies the rich preview instead.
+- **The page is a route handler, not a React page**, so the framework injects no scripts. Its `Content-Security-Policy` admits only that one script and that one stylesheet, by SHA-256 hash of what is served.
+- **The link-preview image** (`/og/invite`) is rendered per request from the same query (`/og/invite?name=…&from=…&as=…`), with the generic card when there is none.
 
 | Variable | Required | Description |
 |---|---|---|

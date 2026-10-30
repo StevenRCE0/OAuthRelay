@@ -4,15 +4,16 @@ import { ADJECTIVES, NOUNS } from './friendlyName'
 // its SHA-256, so nothing else can execute on the page.
 //
 // The invite token lives in the URL fragment, which browsers never send to
-// this server. This script reads it in the browser, fills the "Open" button,
-// and shows who the invite is from — and that is all: no network, no storage,
-// no cookies, and it never touches the payload's `secret`. Every value is
-// written with textContent.
+// this server. The server renders the card from the names in the query; this
+// script reads the token in the browser, fills the "Open" button, and redraws
+// the card from the token's own names and friendly names — and that is all: no
+// network, no storage, no cookies, and it never touches the payload's `secret`.
+// Every value is written with textContent.
 const BODY = `
 const A = __ADJECTIVES__;
 const N = __NOUNS__;
 const $ = (id) => document.getElementById(id);
-const show = (id) => { $(id).hidden = false; };
+const toggle = (id, visible) => { $(id).hidden = !visible; };
 
 const hexBytes = (uuid) => {
   const hex = String(uuid || '').replace(/-/g, '');
@@ -40,49 +41,72 @@ const decode = (token) => {
   return JSON.parse(new TextDecoder().decode(bytes));
 };
 
-const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const text = (value) => (typeof value === 'string' ? value.replace(/\\s+/g, ' ').trim() : '');
+
+const incomplete = () => {
+  toggle('hint', false);
+  toggle('incomplete', true);
+};
 
 const run = async () => {
-  if (!location.hash) return;
+  // No fragment: a bare /context stays the generic card, but one that names a
+  // conversation lost its token on the way here.
+  if (!location.hash) {
+    if (new URLSearchParams(location.search).get('name')) incomplete();
+    return;
+  }
   const match = /^#ktctx:(?:\\/\\/)?([A-Za-z0-9_=-]+)$/.exec(location.hash);
   let invite = null;
   try { invite = match && decode(match[1]); } catch (e) { invite = null; }
   if (!invite || typeof invite !== 'object' || !hexBytes(invite.id)) {
-    $('generic').hidden = true;
-    show('incomplete');
+    incomplete();
     return;
   }
 
-  $('open').href = 'ktctx://' + match[1];
-
   const contextFriendly = await friendlyName(invite.id);
   const contextName = text(invite.contextName);
-  $('context-name').textContent = contextName || contextFriendly || 'a conversation';
-  if (contextName && contextFriendly) {
-    $('context-id').textContent = contextFriendly;
-    show('context-id');
-  }
+  const name = contextName || contextFriendly;
+  $('context-name').textContent = name || 'A conversation on KeepTalking';
+  $('context-id').textContent = contextName && contextFriendly ? contextFriendly : '';
+  toggle('context-id-row', contextName && contextFriendly);
 
-  if (hexBytes(invite.inviter)) {
-    const inviterFriendly = await friendlyName(invite.inviter);
-    const inviterName = text(invite.inviterName);
-    $('inviter-name').textContent = inviterName || inviterFriendly || '';
-    if (inviterName && inviterFriendly) {
-      $('inviter-id').textContent = inviterFriendly;
-      show('inviter-id');
-    }
-    if (inviterName || inviterFriendly) { show('inviter'); show('meta'); }
-  }
+  const inviter = hexBytes(invite.inviter) ? (text(invite.inviterName) || await friendlyName(invite.inviter)) : text(invite.inviterName);
+  $('inviter-name').textContent = inviter || '';
+  toggle('invited-by', inviter);
+  toggle('invited', !inviter);
 
   const slotAlias = text(invite.slotAlias);
-  if (slotAlias) {
-    $('slot-alias').textContent = slotAlias;
-    show('slot');
-    show('meta');
-  }
+  $('slot-alias').textContent = slotAlias;
+  toggle('slot', slotAlias);
+  toggle('details', slotAlias || (contextName && contextFriendly));
 
-  $('generic').hidden = true;
-  show('invite');
+  $('open').href = 'ktctx://' + match[1];
+  toggle('actions', true);
+  $('hint').textContent = 'Nothing happening? KeepTalking may not be installed on this device yet.';
+
+  dock(name, inviter, 'ktctx://' + match[1]);
+};
+
+// Once the page scrolls down to the install section (or, without one, past the
+// card's Join), the card recedes and the dock (the card cut down to its name
+// and Join) takes its place at the top.
+const dock = (name, inviter, href) => {
+  if (!window.IntersectionObserver) return;
+  const bar = $('dock');
+  $('dock-invited').textContent = inviter ? inviter + ' invited you to join' : "You've been invited to join";
+  $('dock-title').textContent = name || 'A conversation on KeepTalking';
+  $('dock-join').href = href;
+  bar.inert = true;
+  bar.hidden = false;
+  const install = document.querySelector('.install');
+  new IntersectionObserver(([entry]) => {
+    const reached = install
+      ? (entry.isIntersecting || entry.boundingClientRect.top < 0) && window.scrollY > 0
+      : !entry.isIntersecting && entry.boundingClientRect.top < 0;
+    document.body.classList.toggle('is-docked', reached);
+    bar.classList.toggle('is-shown', reached);
+    bar.inert = !reached;
+  }, install ? { rootMargin: '0px 0px -35% 0px' } : {}).observe(install || $('actions'));
 };
 
 run();
